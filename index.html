@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Solar System Explorer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    /* ============================================================
+       GLASS MORPHISM UI · 3D Solar System Explorer
+       Frosted-glass panels floating over deep space.
+       ============================================================ */
+    :root {
+      /* Surfaces (slightly different alphas for layered glass) */
+      --bg:           #05070f;
+      --glass:        rgba(15, 23, 42, 0.55);
+      --glass-2:      rgba(15, 23, 42, 0.78);
+      --glass-3:      rgba(8, 12, 24, 0.65);
+      --glass-tint:   rgba(125, 211, 252, 0.08);
+      --border:       rgba(255, 255, 255, 0.10);
+      --border-strong:rgba(255, 255, 255, 0.18);
+
+      /* Typography */
+      --text:         #f1f5f9;
+      --text-soft:    #cbd5e1;
+      --text-dim:     #94a3b8;
+      --text-faint:   #64748b;
+
+      /* Accents */
+      --accent:       #7dd3fc;        /* sky-300 */
+      --accent-2:     #c4b5fd;        /* violet-300 */
+      --accent-3:     #fbcfe8;        /* pink-200 */
+      --warm:         #fbbf24;        /* amber-400 */
+      --warn:         #f87171;        /* red-400 */
+      --success:      #6ee7b7;        /* emerald-300 */
+      --accent-glow:  rgba(125, 211, 252, 0.45);
+      --warm-glow:    rgba(251, 191, 36, 0.40);
+
+      /* Gradients */
+      --grad-accent:  linear-gradient(135deg, #38bdf8 0%, #818cf8 100%);
+      --grad-warm:    linear-gradient(135deg, #fbbf24 0%, #f87171 100%);
+
+      /* Backwards-compat with inline JS that references these names */
+      --nasa-blue:        var(--accent);
+      --nasa-red:         var(--warn);
+      --nasa-white:       var(--text);
+      --nasa-gray:        var(--text-soft);
+      --nasa-dark-gray:   var(--text-dim);
+      --nasa-black:       var(--bg);
+      --deep-space:       var(--bg);
+      --cosmic-blue:      #0a1226;
+      --star-gold:        var(--warm);
+      --nebula-purple:    var(--accent-2);
+      --comet-blue:       var(--accent);
+      --asteroid-orange:  var(--warm);
+      --planet-green:     var(--success);
+      --ring-saturn:      var(--warm);
+      --panel-bg:         var(--glass);
+      --panel-border:     var(--border);
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    canvas { display: block; }
+
+    /* Universal slim scrollbar (glass) */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.12);
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.2); }
+
+    /* ============================================================
+       SHARED GLASS PANEL BASE
+       ============================================================ */
+    .controls,
+    .celestial-panel,
+    #specialEventsControls,
+    .info,
+    .planet-info-card,
+    .chatbot-container,
+    .eclipse-tour-info,
+    #showUIBtn {
+      background: var(--glass);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      backdrop-filter: blur(22px) saturate(180%);
+      -webkit-backdrop-filter: blur(22px) saturate(180%);
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.45),
+        inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    }
+
+    /* Subtle top accent line on each panel */
+    .controls::before,
+    .celestial-panel::before,
+    #specialEventsControls::before,
+    .info::before,
+    .chatbot-container::before,
+    .eclipse-tour-info::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 16px; right: 16px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(125, 211, 252, 0.5), transparent);
+      pointer-events: none;
+    }
+    .controls, .celestial-panel, #specialEventsControls, .info, .chatbot-container, .eclipse-tour-info {
+      position: absolute;
+    }
+
+    /* Mission Control panel */
+    .controls {
+      top: 20px;
+      left: 20px;
+      min-width: 240px;
+      max-height: 380px;
+      overflow: hidden;
+      transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      font-size: 11px;
+    }
+
+    .control-group { margin-bottom: 14px; }
+    .control-group:last-child { margin-bottom: 0; }
+
+    .control-group label {
+      display: block;
+      margin: 0 0 8px;
+      font-size: 9.5px;
+      color: var(--text-dim);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      font-family: 'Orbitron', monospace;
+    }
+
+    /* Range slider — glass track + glass thumb */
+    .control-group input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 999px;
+      outline: none;
+      margin: 0 0 6px;
+    }
+    .control-group input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--text);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.18), 0 0 12px rgba(125, 211, 252, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      transition: box-shadow .2s ease;
+    }
+    .control-group input[type="range"]::-webkit-slider-thumb:hover {
+      box-shadow: 0 0 0 5px rgba(125, 211, 252, 0.25), 0 0 16px rgba(125, 211, 252, 0.5);
+    }
+    .control-group input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      background: var(--text);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+    }
+
+    /* Glass button (pill, frosted) */
+    .control-group button {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-soft);
+      border: 1px solid var(--border);
+      padding: 6px 11px;
+      border-radius: 999px;
+      cursor: pointer;
+      margin: 0 4px 4px 0;
+      font-size: 9.5px;
+      font-family: 'Orbitron', monospace;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      transition: all .2s ease;
+    }
+    .control-group button:hover {
+      background: rgba(125, 211, 252, 0.10);
+      border-color: rgba(125, 211, 252, 0.35);
+      color: var(--text);
+    }
+    .control-group button.active {
+      background: var(--grad-accent);
+      color: #0a1226;
+      border-color: transparent;
+      font-weight: 700;
+    }
+
+    .value-display {
+      font-family: 'JetBrains Mono', 'Orbitron', monospace;
+      font-size: 10px;
+      color: var(--accent);
+      font-weight: 500;
+    }
+
+    /* Panel header bar */
+    .control-header,
+    .celestial-header {
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.04);
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+      -webkit-user-select: none;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-radius: 16px 16px 0 0;
+    }
+    .control-header h3,
+    .celestial-header h4 {
+      margin: 0;
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+      font-size: 11.5px;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 1.8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+    }
+    .control-toggle-icon,
+    .toggle-icon {
+      width: 12px;
+      height: 12px;
+      color: var(--accent);
+      transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      stroke: currentColor;
+      fill: none;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .control-content {
+      max-height: 320px;
+      overflow-y: auto;
+      transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                  padding 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      padding: 16px;
+    }
+    .controls.collapsed .control-content {
+      max-height: 0;
+      padding: 0 16px;
+    }
+    .controls.collapsed .control-toggle-icon { transform: rotate(180deg); }
+
+    /* Info card (bottom-left) */
+    .info {
+      bottom: 80px;
+      left: 20px;
+      padding: 16px 20px;
+      font-size: 11.5px;
+      max-width: 260px;
+      line-height: 1.7;
+      color: var(--text-soft);
+      transition: opacity .25s ease, transform .25s ease;
+    }
+    .info.hidden {
+      opacity: 0;
+      transform: translateY(20px);
+      pointer-events: none;
+    }
+    .info-close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-soft);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s ease;
+    }
+    .info-close:hover { color: var(--warn); border-color: rgba(248, 113, 113, 0.4); }
+    .info-close svg { width: 10px; height: 10px; }
+    .info-toggle-btn {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: var(--grad-accent);
+      border: none;
+      color: #0a1226;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(125, 211, 252, 0.35);
+      z-index: 998;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .25s ease;
+    }
+    .info-toggle-btn:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(125, 211, 252, 0.5); }
+    .info-toggle-btn svg { width: 20px; height: 20px; }
+    .info > strong {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: 'Orbitron', monospace;
+      color: var(--star-gold);
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 1.2px;
+      margin-bottom: 10px;
+    }
+    .info > ul.info-list {
+      margin: 0 0 12px 0;
+    }
+    .info strong {
+      font-family: 'Orbitron', monospace;
+      color: var(--text);
+      font-size: 11px;
+      letter-spacing: 1.8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+    .info strong svg { width: 14px; height: 14px; color: var(--accent); }
+    .info-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .info-list li {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 5px 0;
+      font-size: 11.5px;
+      color: var(--text-soft);
+    }
+    .info-list li svg { width: 12px; height: 12px; color: var(--accent); flex: 0 0 12px; }
+
+    /* Celestial Bodies panel */
+    .celestial-panel {
+      top: 20px;
+      right: 20px;
+      min-width: 240px;
+      max-height: 380px;
+      overflow: hidden;
+      transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    .celestial-content {
+      max-height: 320px;
+      overflow-y: auto;
+      transition: max-height 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+    .celestial-panel.collapsed .celestial-content { max-height: 0; }
+    .celestial-panel.collapsed .toggle-icon { transform: rotate(180deg); }
+
+    .celestial-controls {
+      padding: 12px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.03);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .label-toggle {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text-soft);
+      border: 1px solid var(--border);
+      padding: 7px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 10px;
+      font-family: 'Orbitron', monospace;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      width: 100%;
+      transition: all .2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: center;
+    }
+    .label-toggle svg { width: 12px; height: 12px; }
+    .label-toggle:hover {
+      background: rgba(125, 211, 252, 0.10);
+      border-color: rgba(125, 211, 252, 0.35);
+      color: var(--text);
+    }
+    .label-toggle.active {
+      background: var(--grad-accent);
+      color: #0a1226;
+      border-color: transparent;
+      font-weight: 700;
+    }
+
+    .planet-item {
+      padding: 10px 16px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+      transition: background .2s ease, padding-left .2s ease;
+      font-size: 11.5px;
+      margin: 0;
+      border-radius: 0;
+    }
+    .planet-item:hover {
+      background: rgba(125, 211, 252, 0.08);
+      padding-left: 20px;
+    }
+    .planet-item strong {
+      font-family: 'Orbitron', monospace;
+      font-weight: 600;
+      font-size: 12px;
+      letter-spacing: .8px;
+    }
+    .planet-item.planet strong    { color: var(--accent); }
+    .planet-item.dwarf strong    { color: var(--warm); }
+    .planet-item.asteroid strong { color: var(--warm); }
+    .planet-item.tno strong      { color: var(--accent-2); }
+    .planet-item small { color: var(--text-dim); font-weight: 400; display: block; margin-top: 2px; font-size: 10.5px; }
+
+    .category-header {
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      padding: 8px 16px;
+      margin: 12px 0 4px;
+      font-family: 'Orbitron', monospace;
+      font-size: 9.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.6px;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .category-header svg { width: 12px; height: 12px; color: var(--accent); }
+
+    /* In-scene planet / moon labels */
+    .planet-label {
+      position: absolute;
+      background: rgba(8, 12, 24, 0.7);
+      color: var(--text);
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-family: 'Orbitron', monospace;
+      font-size: 10px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .8px;
+      pointer-events: none;
+      border: 1px solid var(--border);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 1000;
+      transition: opacity 0.3s ease;
+    }
+    .moon-label {
+      position: absolute;
+      background: rgba(8, 12, 24, 0.7);
+      color: var(--text-soft);
+      padding: 2px 7px;
+      border-radius: 999px;
+      font-family: 'Inter', sans-serif;
+      font-size: 8.5px;
+      font-weight: 500;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      pointer-events: none;
+      border: 1px solid var(--border);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index: 999;
+      transition: opacity 0.3s ease;
+    }
+
+    /* Special Events Panel (positioned dynamically by JS) */
+    #specialEventsControls {
+      right: 20px;
+      left: auto;
+      top: 420px;
+      min-width: 240px;
+      max-height: 360px;
+      overflow: hidden;
+      transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      font-size: 11px;
+    }
+
+    .ui-hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-12px);
+      transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    }
+
+    /* Floating music control */
+    .floating-music-control {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 999;
+      display: flex;
+      gap: 10px;
+    }
+    .floating-music-btn {
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--glass);
+      color: var(--text);
+      cursor: pointer;
+      backdrop-filter: blur(18px) saturate(180%);
+      -webkit-backdrop-filter: blur(18px) saturate(180%);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .25s ease;
+    }
+    .floating-music-btn svg { width: 18px; height: 18px; }
+    .floating-music-btn:hover {
+      border-color: rgba(125, 211, 252, 0.4);
+      color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .floating-music-btn:active { transform: translateY(0) scale(0.96); }
+
+    #showUIBtn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      padding: 10px 18px;
+      font-family: 'Orbitron', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      color: var(--text);
+      cursor: pointer;
+      display: none;
+      z-index: 1001;
+      border-radius: 999px;
+    }
+    #showUIBtn:hover { color: var(--accent); border-color: rgba(125, 211, 252, 0.4); }
+
+    /* ====== Planet info modal ====== */
+    .planet-info-card {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      min-width: 440px;
+      max-width: 540px;
+      max-height: 80vh;
+      z-index: 2000;
+      display: none;
+      animation: slideIn 0.35s cubic-bezier(0.2, 0.7, 0.3, 1.1);
+      overflow: hidden;
+      padding: 0;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translate(-50%, -45%); }
+      to   { opacity: 1; transform: translate(-50%, -50%); }
+    }
+
+    .planet-info-header {
+      padding: 20px 24px;
+      background: var(--glass-2);
+      border-bottom: 1px solid var(--border);
+      border-radius: 16px 16px 0 0;
+      position: sticky;
+      top: 0;
+      z-index: 2001;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .planet-info-title {
+      margin: 0;
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+      font-size: 22px;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 1.8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .planet-info-title svg { width: 22px; height: 22px; color: var(--accent); }
+    .planet-type-badge {
+      background: rgba(125, 211, 252, 0.15);
+      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(125, 211, 252, 0.3);
+      font-family: 'Orbitron', monospace;
+      font-size: 9.5px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .close-btn {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-soft);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all .2s ease;
+      flex: 0 0 32px;
+    }
+    .close-btn svg { width: 14px; height: 14px; }
+    .close-btn:hover { color: var(--warn); border-color: rgba(248, 113, 113, 0.4); background: rgba(248, 113, 113, 0.08); }
+
+    .planet-info-content {
+      padding: 22px 24px;
+      max-height: calc(80vh - 80px);
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    .info-section { margin-bottom: 22px; }
+    .info-section h4 {
+      margin: 0 0 14px;
+      font-family: 'Orbitron', monospace;
+      font-weight: 600;
+      font-size: 11.5px;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 1.6px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .info-section h4 svg { width: 14px; height: 14px; color: var(--accent); }
+
+    .info-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .info-item {
+      background: rgba(255, 255, 255, 0.04);
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .info-item-label {
+      font-family: 'Orbitron', monospace;
+      font-size: 9.5px;
+      font-weight: 600;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      margin-bottom: 6px;
+    }
+    .info-item-value {
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text);
+    }
+
+    .planet-description {
+      background: rgba(255, 255, 255, 0.04);
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      font-family: 'Inter', sans-serif;
+      font-size: 13.5px;
+      line-height: 1.65;
+      color: var(--text-soft);
+      margin-bottom: 16px;
+    }
+
+    .moons-section {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .moon-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 9px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-family: 'Inter', sans-serif;
+    }
+    .moon-item:last-child { border-bottom: none; }
+    .moon-info-section { flex: 1; }
+    .moon-name { font-weight: 600; color: var(--text); font-size: 13px; }
+    .moon-info { font-size: 11px; color: var(--text-dim); text-align: left; }
+    .moon-follow-btn { margin-left: 10px; }
+
+    /* Accent buttons (follow sun, follow planet, eclipse tours) */
+    .follow-moon-btn,
+    .follow-sun-btn,
+    .follow-planet-btn,
+    .eclipse-tour-btn,
+    .tour-btn {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-family: 'Orbitron', monospace;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1.2px;
+      transition: all .2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: center;
+    }
+    .follow-moon-btn svg, .follow-sun-btn svg, .follow-planet-btn svg,
+    .eclipse-tour-btn svg, .tour-btn svg { width: 12px; height: 12px; }
+
+    .follow-moon-btn { padding: 5px 10px; border-radius: 8px; font-size: 9.5px; color: var(--accent); }
+    .follow-sun-btn  { padding: 9px 14px; border-radius: 10px; font-size: 10.5px; color: var(--warm); width: 100%; margin-top: 10px; }
+    .follow-planet-btn {
+      padding: 12px 22px;
+      border-radius: 12px;
+      font-size: 12px;
+      width: 100%;
+      margin-top: 18px;
+      background: var(--grad-accent);
+      color: #0a1226;
+      border-color: transparent;
+      font-weight: 700;
+    }
+    .eclipse-tour-btn { padding: 6px 10px; border-radius: 8px; font-size: 9.5px; width: 100%; color: var(--text-soft); }
+    .tour-btn         { padding: 11px 14px; border-radius: 10px; font-size: 11px; color: var(--text); }
+
+    .follow-moon-btn:hover,
+    .follow-sun-btn:hover,
+    .follow-planet-btn:hover,
+    .eclipse-tour-btn:hover,
+    .tour-btn:hover {
+      background: rgba(125, 211, 252, 0.12);
+      border-color: rgba(125, 211, 252, 0.4);
+      transform: translateY(-1px);
+    }
+    .follow-planet-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(125, 211, 252, 0.35);
+    }
+    .follow-moon-btn:active,
+    .follow-sun-btn:active,
+    .follow-planet-btn:active,
+    .eclipse-tour-btn:active,
+    .tour-btn:active { transform: translateY(0); }
+
+    .follow-planet-btn.following,
+    .eclipse-tour-btn.active,
+    .tour-btn.active {
+      background: var(--grad-warm);
+      color: #1a0f00;
+      border-color: transparent;
+      font-weight: 700;
+    }
+    .follow-sun-btn.following {
+      background: var(--grad-warm);
+      color: #1a0f00;
+      border-color: transparent;
+    }
+
+    /* Eclipse tour info (bottom strip) */
+    .eclipse-tour-info {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 16px 22px;
+      text-align: left;
+      z-index: 2000;
+      width: min(720px, 88%);
+      max-width: 720px;
+    }
+    .eclipse-info-content h3 {
+      font-family: 'Orbitron', monospace;
+      color: var(--text);
+      margin: 0 0 6px;
+      font-size: 14px;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .eclipse-info-content h3 svg { width: 14px; height: 14px; color: var(--warm); }
+    .eclipse-phase-title {
+      font-family: 'Inter', sans-serif;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .eclipse-phase-desc {
+      font-family: 'Inter', sans-serif;
+      color: var(--text-soft);
+      font-size: 12.5px;
+      margin-bottom: 12px;
+      line-height: 1.55;
+    }
+    .eclipse-progress-bar {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .eclipse-progress-fill {
+      height: 100%;
+      background: var(--grad-warm);
+      border-radius: 999px;
+      width: 0%;
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px var(--warm-glow);
+    }
+
+    .orbital-period-display {
+      background: var(--grad-accent);
+      padding: 14px 18px;
+      border-radius: 12px;
+      text-align: center;
+      margin-top: 16px;
+      color: #0a1226;
+    }
+    .orbital-period-value {
+      font-family: 'Orbitron', monospace;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+    .orbital-period-label {
+      font-family: 'Inter', sans-serif;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.4px;
+      margin-top: 4px;
+      opacity: .8;
+    }
+
+    .controls-info {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 14px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+    .control-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 9px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-family: 'Inter', sans-serif;
+    }
+    .control-item:last-child { border-bottom: none; }
+    .control-icon {
+      width: 20px; height: 20px;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--accent);
+    }
+    .control-icon svg { width: 14px; height: 14px; }
+    .control-text { font-size: 12.5px; color: var(--text-soft); line-height: 1.4; }
+    .control-text strong { color: var(--text); font-weight: 600; }
+
+    /* ============================================================
+       CHATBOT — glass card
+       ============================================================ */
+    .chatbot-container {
+      position: fixed;
+      bottom: 96px;
+      right: 24px;
+      width: 380px;
+      max-height: 540px;
+      display: flex;
+      flex-direction: column;
+      z-index: 1000;
+      transform: translateY(0);
+      transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+      overflow: hidden;
+    }
+    .chatbot-container.hidden {
+      transform: translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .chatbot-header {
+      padding: 14px 18px;
+      background: rgba(255, 255, 255, 0.04);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-radius: 16px 16px 0 0;
+    }
+    .chatbot-header h3 {
+      margin: 0;
+      font-family: 'Orbitron', monospace;
+      font-weight: 700;
+      font-size: 13px;
+      color: var(--text);
+      text-transform: uppercase;
+      letter-spacing: 1.6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .chatbot-header h3 svg { width: 14px; height: 14px; color: var(--accent); }
+    .chatbot-close-btn {
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text-soft);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all .2s ease;
+    }
+    .chatbot-close-btn svg { width: 12px; height: 12px; }
+    .chatbot-close-btn:hover { color: var(--warn); border-color: rgba(248, 113, 113, 0.4); }
+    .close-btn svg { width: 16px; height: 16px; color: var(--text-soft); }
+    .close-btn:hover svg { color: var(--warn); }
+    .chatbot-toggle-btn svg { width: 26px; height: 26px; color: #0a1226; }
+    .floating-music-btn svg { width: 20px; height: 20px; color: var(--accent); }
+
+    .chatbot-messages {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      max-height: 360px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .message {
+      padding: 11px 15px;
+      border-radius: 14px;
+      font-family: 'Inter', sans-serif;
+      font-size: 13.5px;
+      line-height: 1.5;
+      max-width: 86%;
+      border: 1px solid var(--border);
+    }
+    .message .chatbot-bullet-list { margin: 0; padding-left: 18px; }
+    .bot-message {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .user-message {
+      background: var(--grad-accent);
+      color: #0a1226;
+      align-self: flex-end;
+      border-bottom-right-radius: 4px;
+      border-color: transparent;
+      font-weight: 500;
+    }
+
+    .chatbot-input-container {
+      display: flex;
+      padding: 14px;
+      gap: 10px;
+      background: rgba(255, 255, 255, 0.03);
+      border-top: 1px solid var(--border);
+      border-radius: 0 0 16px 16px;
+    }
+    #chatbotInput {
+      flex: 1;
+      background: rgba(0, 0, 0, 0.25);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 11px 16px;
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 13.5px;
+      outline: none;
+      transition: all .2s ease;
+    }
+    #chatbotInput::placeholder { color: var(--text-faint); }
+    #chatbotInput:focus {
+      border-color: rgba(125, 211, 252, 0.5);
+      box-shadow: 0 0 0 3px rgba(125, 211, 252, 0.15);
+    }
+
+    #sendChatbotMessage {
+      background: var(--grad-accent);
+      color: #0a1226;
+      border: none;
+      border-radius: 50%;
+      width: 42px;
+      height: 42px;
+      font-size: 0;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all .2s ease;
+      box-shadow: 0 4px 16px rgba(125, 211, 252, 0.3);
+    }
+    #sendChatbotMessage svg { width: 16px; height: 16px; stroke: #0a1226; }
+    #sendChatbotMessage:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(125, 211, 252, 0.5); }
+    #sendChatbotMessage:active { transform: translateY(0) scale(0.96); }
+
+    .chatbot-toggle-btn {
+      position: fixed;
+      bottom: 96px;
+      right: 24px;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: var(--grad-accent);
+      border: none;
+      color: #0a1226;
+      cursor: pointer;
+      box-shadow: 0 8px 28px rgba(125, 211, 252, 0.4);
+      z-index: 999;
+      transition: all .25s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .chatbot-toggle-btn svg { width: 22px; height: 22px; stroke: #0a1226; }
+    .chatbot-toggle-btn:hover { transform: translateY(-2px) scale(1.05); box-shadow: 0 12px 32px rgba(125, 211, 252, 0.55); }
+    .chatbot-toggle-btn:active { transform: translateY(0) scale(0.97); }
+
+    /* Inline icon sizing */
+    .icon { display: inline-block; width: 1em; height: 1em; vertical-align: -0.125em; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: 0 0 auto; }
+    .icon-sm { width: 12px; height: 12px; }
+    .icon-md { width: 14px; height: 14px; }
+    .icon-lg { width: 18px; height: 18px; }
+
+    /* Mobile */
+    @media (max-width: 768px) {
+      .controls, .celestial-panel, #specialEventsControls { min-width: 200px; max-width: calc(100vw - 40px); }
+      .info { max-width: calc(100vw - 40px); }
+      .floating-music-control { bottom: 86px; right: 16px; }
+      .floating-music-btn { width: 44px; height: 44px; }
+      .chatbot-container { width: calc(100% - 32px); bottom: 92px; right: 16px; }
+      .chatbot-toggle-btn { bottom: 92px; right: 16px; width: 52px; height: 52px; }
+      .planet-info-card { min-width: calc(100vw - 40px); max-width: calc(100vw - 40px); }
+    }
+  </style>
+</head>
+<body>
+  <!-- SVG icon sprite (referenced via <use href="#icon-..."/>) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+    <defs>
+      <symbol id="i-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"/>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+      </symbol>
+      <symbol id="i-planet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="5"/>
+        <ellipse cx="12" cy="12" rx="10" ry="3" transform="rotate(-20 12 12)"/>
+      </symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+      </symbol>
+      <symbol id="i-comet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="17" cy="7" r="3"/>
+        <path d="M14.5 9.5L5 19M19 5l1.5-1.5M21 7h2M19 9l1.5 1.5"/>
+      </symbol>
+      <symbol id="i-orbit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <ellipse cx="12" cy="12" rx="10" ry="4"/>
+        <circle cx="22" cy="12" r="1.5" fill="currentColor"/>
+      </symbol>
+      <symbol id="i-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M9 18V5l12-2v13"/>
+        <circle cx="6" cy="18" r="3"/>
+        <circle cx="18" cy="16" r="3"/>
+      </symbol>
+      <symbol id="i-mute" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M11 5L6 9H2v6h4l5 4V5z"/>
+        <line x1="23" y1="9" x2="17" y2="15"/>
+        <line x1="17" y1="9" x2="23" y2="15"/>
+      </symbol>
+      <symbol id="i-satellite" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M5 19l4-4"/>
+        <rect x="9" y="3" width="6" height="6" rx="1" transform="rotate(45 12 6)"/>
+        <path d="M14 7l4 4M5 5l4 4"/>
+      </symbol>
+      <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+      </symbol>
+      <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 2L11 13"/>
+        <path d="M22 2l-7 20-4-9-9-4 20-7z"/>
+      </symbol>
+      <symbol id="i-target" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <circle cx="12" cy="12" r="6"/>
+        <circle cx="12" cy="12" r="2" fill="currentColor"/>
+      </symbol>
+      <symbol id="i-mouse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="3" width="12" height="18" rx="6"/>
+        <line x1="12" y1="7" x2="12" y2="11"/>
+      </symbol>
+      <symbol id="i-keyboard" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="6" width="20" height="12" rx="2"/>
+        <line x1="6" y1="10" x2="6" y2="10.01"/>
+        <line x1="10" y1="10" x2="10" y2="10.01"/>
+        <line x1="14" y1="10" x2="14" y2="10.01"/>
+        <line x1="18" y1="10" x2="18" y2="10.01"/>
+        <line x1="7" y1="14" x2="17" y2="14"/>
+      </symbol>
+      <symbol id="i-rotate" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23 4v6h-6"/>
+        <path d="M20.49 15A9 9 0 1 1 19 6.5L23 10"/>
+      </symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+        <circle cx="12" cy="12" r="3"/>
+      </symbol>
+      <symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
+        <line x1="1" y1="1" x2="23" y2="23"/>
+      </symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="6" y="4" width="4" height="16"/>
+        <rect x="14" y="4" width="4" height="16"/>
+      </symbol>
+      <symbol id="i-play" viewBox="0 0 24 24" fill="currentColor">
+        <polygon points="5 3 19 12 5 21 5 3"/>
+      </symbol>
+      <symbol id="i-info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="12" y1="16" x2="12" y2="12"/>
+        <line x1="12" y1="8" x2="12" y2="8.01"/>
+      </symbol>
+      <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="8" y1="6" x2="21" y2="6"/>
+        <line x1="8" y1="12" x2="21" y2="12"/>
+        <line x1="8" y1="18" x2="21" y2="18"/>
+        <circle cx="4" cy="6" r="1" fill="currentColor"/>
+        <circle cx="4" cy="12" r="1" fill="currentColor"/>
+        <circle cx="4" cy="18" r="1" fill="currentColor"/>
+      </symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 9 12 15 18 9"/>
+      </symbol>
+      <symbol id="i-rocket" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/>
+        <path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/>
+        <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/>
+        <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/>
+      </symbol>
+      <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </symbol>
+    </defs>
+  </svg>
+
+  <!-- Show UI Button (hidden by default) -->
+  <button id="showUIBtn">Show UI</button>
+
+  <div class="controls collapsed" id="uiControls">
+    <div class="control-header" onclick="toggleControlPanel()">
+      <h3>Mission Control <svg class="control-toggle-icon"><use href="#i-chevron-down"/></svg></h3>
+    </div>
+    <div class="control-content">
+      <div class="control-group">
+        <label>Speed (Earth Time)</label>
+        <input type="range" id="speedControl" min="0" max="10" step="0.1" value="0.4">
+        <span id="speedValue" class="value-display">0.4x Slow</span>
+      </div>
+      
+      <div class="control-group">
+        <label>Bloom</label>
+        <input type="range" id="bloomControl" min="0" max="2" step="0.1" value="0.5">
+        <span id="bloomValue" class="value-display">0.5</span>
+      </div>
+      
+      <div class="control-group">
+        <button id="pauseBtn">Pause</button>
+        <button id="resetBtn">Reset</button>
+        <button id="hideUIBtn">Hide UI</button>
+      </div>
+
+      <div class="control-group">
+        <label>Camera Control</label>
+        <button id="stopFollowBtn" style="display: none;" class="active">Stop Follow</button>
+      </div>
+      
+
+      <div class="control-group">
+        <label>Atmosphere</label>
+        <button id="musicBtn">Music</button>
+        <button id="muteMusicBtn" style="display: none;">Mute</button>
+        <input type="range" id="volumeControl" min="0" max="1" step="0.1" value="0.3" style="width: 80%; margin-top: 5px;">
+        <span id="volumeValue" class="value-display">30%</span>
+      </div>
+      
+      <div class="control-group">
+        <label>Toggle</label>
+        <button id="orbitsBtn" class="active">Orbits</button>
+        <button id="moonsBtn" class="active">Moons</button>
+        <button id="realAsteroidsBtn" class="active">Real Asteroids</button>
+        <button id="cometsBtn" class="active">Comets</button>
+      </div>
+      
+      <div class="control-group">
+        <label>Asteroid Belts</label>
+        <button id="allAsteroidsBtn" class="active">All Belts</button>
+        <button id="mainAsteroidsBtn" class="active">Main Belt</button>
+        <button id="trojansBtn" class="active">Trojans</button>
+        <button id="kuiperBtn" class="active">Kuiper</button>
+        <button id="scatteredBtn" class="active">Scattered</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Special Events Panel -->
+  <div class="controls collapsed" id="specialEventsControls">
+    <div class="control-header" onclick="toggleSpecialEventsPanel()">
+      <h3>Special Events <svg class="control-toggle-icon"><use href="#i-chevron-down"/></svg></h3>
+    </div>
+    <div class="control-content">
+      <div class="control-group">
+        <h4 style="margin: 5px 0; color: var(--star-gold);">Eclipse Tours</h4>
+        <button id="solarEclipseTour" class="tour-btn" style="width: 100%; margin-bottom: 8px;">
+          <svg class="icon icon-sm"><use href="#i-sun"/></svg>Solar Eclipse Tour
+        </button>
+        <button id="lunarEclipseTour" class="tour-btn" style="width: 100%;">
+          <svg class="icon icon-sm"><use href="#i-moon"/></svg>Lunar Eclipse Tour
+        </button>
+      </div>
+    </div>
+  </div>
+  
+  <div class="info hidden" id="infoCard">
+    <button class="info-close" id="closeInfoCard" aria-label="Close info card"><svg><use href="#i-x"/></svg></button>
+    <strong><svg class="icon icon-md"><use href="#i-planet"/></svg>NASA Solar Explorer</strong>
+    <ul class="info-list">
+      <li><svg class="icon icon-sm"><use href="#i-globe"/></svg>8 Planets</li>
+      <li><svg class="icon icon-sm"><use href="#i-globe"/></svg>11 Dwarf Planets</li>
+      <li><svg class="icon icon-sm"><use href="#i-comet"/></svg>4 Asteroid Belts</li>
+      <li><svg class="icon icon-sm"><use href="#i-orbit"/></svg>Trans-Neptunian Objects</li>
+      <li><svg class="icon icon-sm"><use href="#i-moon"/></svg>50+ Moons</li>
+      <li><svg class="icon icon-sm"><use href="#i-orbit"/></svg>Glowing Orbit Rings</li>
+      <li><svg class="icon icon-sm"><use href="#i-music"/></svg>Atmospheric Music</li>
+      <li><svg class="icon icon-sm"><use href="#i-satellite"/></svg>Real-time NASA Data</li>
+    </ul>
+    <button id="followSunBtn" class="follow-sun-btn"><svg class="icon icon-sm"><use href="#i-sun"/></svg>Follow Sun</button>
+  </div>
+
+  <button class="info-toggle-btn" id="infoToggleBtn" title="Show overview" aria-label="Show overview">
+    <svg><use href="#i-info"/></svg>
+  </button>
+  
+  <div class="celestial-panel collapsed" id="celestialPanel">
+    <div class="celestial-header" onclick="toggleCelestialPanel()">
+      <h4>Celestial Bodies <svg class="toggle-icon"><use href="#i-chevron-down"/></svg></h4>
+    </div>
+    <div class="celestial-content">
+      <div class="celestial-controls">
+        <button id="labelToggle" class="label-toggle">Show Planet Names</button>
+        <button id="moonLabelToggle" class="label-toggle">Show Moon Names</button>
+      </div>
+      <div id="planetList"></div>
+    </div>
+  </div>
+  
+  <!-- Planet Information Card -->
+  <div id="planetInfoCard" class="planet-info-card">
+    <div class="planet-info-header">
+      <h2 class="planet-info-title">
+        <svg class="icon icon-lg" id="planetIcon" style="color: var(--accent)"><use href="#i-planet"/></svg>
+        <span id="planetName">SATURN</span>
+        <span id="planetTypeBadge" class="planet-type-badge">PLANET</span>
+      </h2>
+      <button class="close-btn" id="closePlanetInfo" aria-label="Close"><svg class="icon icon-md"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="planet-info-content">
+      <div class="info-section">
+        <div class="info-grid">
+          <div class="info-item">
+            <div class="info-item-label">Orbital Period</div>
+            <div class="info-item-value" id="orbitalPeriod">29 years</div>
+          </div>
+          <div class="info-item">
+            <div class="info-item-label">Size (Relative to Earth)</div>
+            <div class="info-item-value" id="sizeRelative">1.7x Earth</div>
+          </div>
+          <div class="info-item">
+            <div class="info-item-label">Distance from Sun</div>
+            <div class="info-item-value" id="distanceFromSun">31 AU</div>
+          </div>
+          <div class="info-item">
+            <div class="info-item-label">Discovery Year</div>
+            <div class="info-item-value" id="discoveryYear">Ancient</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <div class="planet-description" id="planetDescription">
+          Famous for its prominent ring system. Less dense than water. Has 146 known moons.
+        </div>
+      </div>
+
+      <div class="info-section" id="moonsSection">
+        <h4><svg class="icon icon-md"><use href="#i-moon"/></svg>Moons (<span id="moonCount">9</span>)</h4>
+        <div class="moons-section" id="moonsContainer">
+          <!-- Moon items will be populated dynamically -->
+        </div>
+      </div>
+
+      <div class="info-section">
+        <h4><svg class="icon icon-md"><use href="#i-list"/></svg>Controls</h4>
+        <div class="controls-info">
+          <div class="control-item">
+            <div class="control-icon"><svg class="icon icon-md"><use href="#i-mouse"/></svg></div>
+            <div class="control-text">
+              <strong>Mouse:</strong> Orbit around object
+            </div>
+          </div>
+          <div class="control-item">
+            <div class="control-icon"><svg class="icon icon-md"><use href="#i-rotate"/></svg></div>
+            <div class="control-text">
+              <strong>Scroll:</strong> Zoom in/out
+            </div>
+          </div>
+          <div class="control-item">
+            <div class="control-icon"><svg class="icon icon-md"><use href="#i-keyboard"/></svg></div>
+            <div class="control-text">
+              <strong>R key or Reset:</strong> Stop following
+            </div>
+          </div>
+          <div class="control-item">
+            <div class="control-icon"><svg class="icon icon-md"><use href="#i-orbit"/></svg></div>
+            <div class="control-text">
+              <strong>O key:</strong> Toggle glowing orbits
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="info-section">
+        <button id="followPlanetBtn" class="follow-planet-btn">
+          <svg class="icon icon-sm"><use href="#i-target"/></svg>Follow Planet
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Eclipse Tour Info Panel (bottom, stretched) -->
+  <div id="eclipseTourInfo" class="eclipse-tour-info" style="display: none;">
+    <div class="eclipse-info-content">
+      <div style="display:flex; gap:18px; align-items:flex-start;">
+        <div style="flex:0 0 56px; color: var(--warm);"><svg style="width:48px; height:48px; stroke-width:1.4"><use href="#i-moon"/></svg></div>
+        <div style="flex:1 1 auto;">
+          <h3 style="margin:0 0 6px 0; font-size:15px; display:flex; align-items:center; gap:8px; color: var(--text);"><svg class="icon icon-md" style="color: var(--warm)"><use href="#i-sun"/></svg>Solar Eclipse: Cinematic Tour</h3>
+          <div id="eclipsePhaseTitle" class="eclipse-phase-title">Phase 1: Getting Ready</div>
+          <div id="eclipsePhaseDesc" class="eclipse-phase-desc" style="margin-top:6px;">We will slowly move in so you can clearly see how the Sun, Moon and Earth line up — this helps you understand why eclipses happen. The tour is slow on purpose so you can enjoy every moment.</div>
+        </div>
+        <div style="flex:0 0 220px; display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+          <div class="eclipse-progress-bar" style="width:200px;">
+            <div id="eclipseProgress" class="eclipse-progress-fill"></div>
+          </div>
+          <div style="font-size:11px; color:rgba(255,255,255,0.75);">Sit back — the whole tour may take a minute or two. Be patient; it's designed to teach and look beautiful.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Floating Music Control -->
+  <div class="floating-music-control">
+    <button id="floatingMusicBtn" class="floating-music-btn" title="Play Interstellar Soundtrack" aria-label="Play music">
+      <svg class="icon icon-lg"><use href="#i-music"/></svg>
+    </button>
+    <button id="floatingMuteMusicBtn" class="floating-music-btn" style="display: none;" title="Mute Music" aria-label="Mute music">
+      <svg class="icon icon-lg"><use href="#i-mute"/></svg>
+    </button>
+  </div>
+  
+  <!-- Hidden audio element for space music -->
+  <audio id="spaceMusic" loop preload="none">
+    <!-- Your custom Interstellar soundtrack -->
+    <source src="/textures/interstellar.mp3" type="audio/mpeg">
+    <!-- Fallback sources for compatibility -->
+    <source src="https://www.soundjay.com/misc/sounds-790.mp3" type="audio/mpeg">
+    <source src="https://freesound.org/data/previews/316/316847_5195967-lq.mp3" type="audio/mpeg">
+    Your browser does not support the audio element.
+  </audio>
+
+  <!-- Chatbot Container -->
+  <div id="chatbotContainer" class="chatbot-container">
+    <div class="chatbot-header">
+      <h3><svg class="icon icon-md"><use href="#i-chat"/></svg>Cosmo</h3>
+      <button id="closeChatbot" class="chatbot-close-btn" aria-label="Close chat"><svg class="icon icon-sm"><use href="#i-x"/></svg></button>
+    </div>
+    <div class="chatbot-messages" id="chatbotMessages">
+      <div class="message bot-message">
+        Hello, I am Cosmo, your guide to the solar system. Ask me about planets, moons, missions, or any cosmic phenomenon.
+      </div>
+    </div>
+    <div class="chatbot-input-container">
+      <input type="text" id="chatbotInput" placeholder="Ask about planets, moons, or space..." />
+      <button id="sendChatbotMessage" aria-label="Send message"><svg><use href="#i-send"/></svg></button>
+    </div>
+  </div>
+
+  <!-- Chatbot Toggle Button -->
+  <button id="chatbotToggle" class="chatbot-toggle-btn" aria-label="Open chat">
+    <svg><use href="#i-chat"/></svg>
+  </button>
+
+  <script type="module" src="./main.js"></script>
+  
+  <script>
+    function toggleCelestialPanel() {
+      const panel = document.getElementById('celestialPanel');
+      const icon = panel.querySelector('.toggle-icon');
+      
+      panel.classList.toggle('collapsed');
+      
+      // Update icon based on state
+      if (panel.classList.contains('collapsed')) {
+        icon.textContent = '►';
+      } else {
+        icon.textContent = '▼';
+      }
+      
+      // Immediately update Special Events panel position when celestial panel changes
+      updateSpecialEventsPanelPosition();
+      
+      // Also update after animation completes for smooth positioning
+      setTimeout(updateSpecialEventsPanelPosition, 400);
+    }
+
+    function toggleControlPanel() {
+      const panel = document.getElementById('uiControls');
+      const icon = panel.querySelector('.control-toggle-icon');
+      
+      panel.classList.toggle('collapsed');
+      
+      // Update icon based on state
+      if (panel.classList.contains('collapsed')) {
+        icon.textContent = '►';
+      } else {
+        icon.textContent = '▼';
+      }
+    }
+
+    function toggleSpecialEventsPanel() {
+      const panel = document.getElementById('specialEventsControls');
+      const icon = panel.querySelector('.control-toggle-icon');
+      
+      panel.classList.toggle('collapsed');
+      
+      // Update icon based on state
+      if (panel.classList.contains('collapsed')) {
+        icon.textContent = '►';
+      } else {
+        icon.textContent = '▼';
+      }
+      
+      // Update position after toggle
+      updateSpecialEventsPanelPosition();
+    }
+    
+    function updateSpecialEventsPanelPosition() {
+      const celestialPanel = document.getElementById('celestialPanel');
+      const specialEventsPanel = document.getElementById('specialEventsControls');
+      
+      if (celestialPanel && specialEventsPanel) {
+        const celestialRect = celestialPanel.getBoundingClientRect();
+        const isCollapsed = celestialPanel.classList.contains('collapsed');
+        
+        // Align the Special Events panel exactly with the celestial panel
+        const celestialLeft = celestialRect.left + window.scrollX;
+        const celestialWidth = celestialRect.width;
+        
+        let topPosition;
+        if (isCollapsed) {
+          // When collapsed, position right below with minimal gap
+          topPosition = celestialRect.bottom + window.scrollY + 5;
+        } else {
+          // When expanded, position only halfway down to avoid Earth area
+          const celestialTop = celestialRect.top + window.scrollY;
+          const celestialHeight = celestialRect.height;
+          topPosition = celestialTop + (celestialHeight * 0.6) + 15; // 60% down + small gap
+        }
+        
+        specialEventsPanel.style.top = topPosition + 'px';
+        specialEventsPanel.style.left = celestialLeft + 'px';
+        specialEventsPanel.style.width = celestialWidth + 'px';
+        specialEventsPanel.style.right = 'auto'; // Remove right positioning
+      }
+    }
+    
+    function toggleCelestialPanel() {
+      const panel = document.getElementById('celestialPanel');
+      const icon = panel.querySelector('.toggle-icon');
+      
+      panel.classList.toggle('collapsed');
+      
+      // Update icon based on state
+      if (panel.classList.contains('collapsed')) {
+        icon.textContent = '►';
+      } else {
+        icon.textContent = '▼';
+      }
+      
+      // Update Special Events panel position after celestial panel changes
+      setTimeout(updateSpecialEventsPanelPosition, 300); // Wait for animation
+    }
+    
+    // Update position on page load and resize
+    window.addEventListener('load', updateSpecialEventsPanelPosition);
+    window.addEventListener('resize', updateSpecialEventsPanelPosition);
+
+    // Info card toggle (NASA Solar Explorer overview)
+    document.addEventListener('DOMContentLoaded', function() {
+      const infoCard = document.getElementById('infoCard');
+      const infoToggleBtn = document.getElementById('infoToggleBtn');
+      const closeInfoCard = document.getElementById('closeInfoCard');
+
+      if (!infoCard || !infoToggleBtn) return;
+
+      infoToggleBtn.addEventListener('click', function() {
+        infoCard.classList.toggle('hidden');
+      });
+
+      if (closeInfoCard) {
+        closeInfoCard.addEventListener('click', function() {
+          infoCard.classList.add('hidden');
+        });
+      }
+    });
+
+    // Chatbot functionality
+    document.addEventListener('DOMContentLoaded', function() {
+      const chatbotContainer = document.getElementById('chatbotContainer');
+      const chatbotToggle = document.getElementById('chatbotToggle');
+      const closeChatbot = document.getElementById('closeChatbot');
+      const chatbotInput = document.getElementById('chatbotInput');
+      const sendButton = document.getElementById('sendChatbotMessage');
+      const chatbotMessages = document.getElementById('chatbotMessages');
+
+      const COSMO_SYSTEM_PROMPT = "You are Cosmo, an expert, enthusiastic space chatbot for a solar system website. Provide comprehensive, thorough, and highly educational answers with accurate scientific facts. Never cut your answers short or leave explanations incomplete. Always format your text beautifully with bullet points or clear sections so it is easy to read.";
+      let isSending = false;
+
+      // Toggle chatbot visibility
+      chatbotToggle.addEventListener('click', function() {
+        chatbotContainer.classList.toggle('hidden');
+      });
+
+      // Close chatbot
+      closeChatbot.addEventListener('click', function() {
+        chatbotContainer.classList.add('hidden');
+      });
+
+      function renderMessageHtml(rawText) {
+        const safeText = (rawText || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;');
+
+        const withBold = safeText.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        const lines = withBold.split(/\n+/);
+        const bulletLines = lines.filter(line => /^\s*-\s+/.test(line));
+
+        if (bulletLines.length && bulletLines.length === lines.length) {
+          const items = lines.map(line => `<li>${line.replace(/^\s*-\s+/, '').trim()}</li>`).join('');
+          return `<ul class="chatbot-bullet-list">${items}</ul>`;
+        }
+
+        return withBold.replace(/\n/g, '<br>');
+      }
+
+      function setMessageContent(target, text) {
+        if (!target) return;
+        target.innerHTML = renderMessageHtml(text);
+      }
+
+      function setFallbackResponse(messageElement, userMessage, notice) {
+        const fallback = getFallbackBotResponse(userMessage);
+        const combined = notice ? `${fallback}\n\n${notice}` : fallback;
+        setMessageContent(messageElement, combined);
+      }
+
+      // Send message function
+      async function sendMessage() {
+        const message = chatbotInput.value.trim();
+        if (!message || isSending) {
+          return;
+        }
+
+        addMessage(message, 'user');
+        chatbotInput.value = '';
+
+        isSending = true;
+        const pendingMessage = addMessage('Contacting Cosmo...', 'bot');
+
+        try {
+          const { text, reason } = await fetchGroqResponse(message);
+          if (text) {
+            setMessageContent(pendingMessage, text);
+          } else {
+            const fallbackNotice = reason || 'Cosmo is taking a moment offline. Showing a curated fact in the meantime.';
+            setFallbackResponse(pendingMessage, message, fallbackNotice);
+          }
+        } catch (error) {
+          console.error('Cosmo error:', error);
+          const errorNotice = error?.message ? `Cosmo error: ${error.message}` : 'Cosmo connection problem detected.';
+          setFallbackResponse(pendingMessage, message, `${errorNotice} Showing a curated fact instead.`);
+        } finally {
+          isSending = false;
+        }
+      }
+
+      // Add message to chat
+      function addMessage(text, sender) {
+        const messageDiv = document.createElement('div');
+        messageDiv.classList.add('message');
+        messageDiv.classList.add(sender + '-message');
+        setMessageContent(messageDiv, text);
+        chatbotMessages.appendChild(messageDiv);
+        chatbotMessages.scrollTop = chatbotMessages.scrollHeight;
+        return messageDiv;
+      }
+
+      // Call the Vite /api/chat proxy (which forwards to Groq server-side)
+      async function fetchGroqResponse(message) {
+        const response = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_message: message, system_prompt: COSMO_SYSTEM_PROMPT })
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          const errorMessage = data?.error || `Cosmo proxy failed with status ${response.status}`;
+          throw new Error(errorMessage);
+        }
+
+        const text = (data?.response || '').toString().trim();
+        if (text) {
+          return { text, reason: null };
+        }
+
+        return { text: null, reason: 'Cosmo returned an empty response.' };
+      }
+
+      // Get fallback bot response based on user input
+      function getFallbackBotResponse(message) {
+        const lowerMsg = message.toLowerCase();
+        
+        // Planet information
+        if (lowerMsg.includes('sun')) {
+          return "- **Sun**: Yellow-dwarf star with 99.86% of system mass and a surface near 5,778 K.";
+        }
+        
+        if (lowerMsg.includes('mercury')) {
+          return "- **Mercury**: Smallest planet with extreme swings from -173°C nights to 427°C days due to scant atmosphere.";
+        }
+        
+        if (lowerMsg.includes('venus')) {
+          return "- **Venus**: Earth-sized twin wrapped in a dense CO₂ atmosphere that drives the hottest surface in the solar system.";
+        }
+        
+        if (lowerMsg.includes('earth')) {
+          return "- **Earth**: Third planet, 71% oceans, and the only world where life is confirmed.";
+        }
+        
+        if (lowerMsg.includes('mars')) {
+          return "- **Mars**: Iron-rich 'Red Planet' with thin air and tiny moons Phobos and Deimos.";
+        }
+        
+        if (lowerMsg.includes('jupiter')) {
+          return "- **Jupiter**: Giant gas world with 80+ moons and the centuries-old Great Red Spot storm.";
+        }
+        
+        if (lowerMsg.includes('saturn')) {
+          return "- **Saturn**: Second-largest planet highlighted by bright rings of ice and rock.";
+        }
+        
+        if (lowerMsg.includes('uranus')) {
+          return "- **Uranus**: Methane-tinted ice giant tipped 98° on its side, giving extreme seasons.";
+        }
+        
+        if (lowerMsg.includes('neptune')) {
+          return "- **Neptune**: Distant ice giant with supersonic winds and a deep azure hue.";
+        }
+        
+        // Moon information
+        if (lowerMsg.includes('moon') || lowerMsg.includes('luna')) {
+          return "- **Earth's Moon**: Fifth-largest satellite, likely born from a giant impact 4.5 billion years ago.";
+        }
+        
+        // General space questions
+        if (lowerMsg.includes('solar system')) {
+          return "- **Solar System**: Gravity binds the Sun, planets, moons, asteroids, and comets formed from a 4.6-billion-year-old gas cloud.";
+        }
+        
+        if (lowerMsg.includes('galaxy')) {
+          return "- **Galaxy**: Vast gravitational islands of stars, gas, and dust; the Milky Way hosts our solar system.";
+        }
+        
+        if (lowerMsg.includes('black hole')) {
+          return "- **Black hole**: Collapsed star core where gravity is so intense that not even light escapes.";
+        }
+        
+        if (lowerMsg.includes('comet')) {
+          return "- **Comet**: Icy body from the outer solar system that grows a glowing coma and tail near the Sun.";
+        }
+        
+        if (lowerMsg.includes('asteroid')) {
+          return "- **Asteroid**: Rocky Sun-orbiting body, often in the belt between Mars and Jupiter, ranging from pebbles to dwarf-planet scale.";
+        }
+        
+        // Controls and features
+        if (lowerMsg.includes('control') || lowerMsg.includes('how to') || lowerMsg.includes('use')) {
+          return "- **Explore**: Drag to orbit, scroll to zoom, and click planets for profiles; tweak speed and orbits in the Mission Control panel.";
+        }
+        
+        if (lowerMsg.includes('music') || lowerMsg.includes('sound')) {
+          return "- **Music**: Tap the music button in Mission Control or the floating vinyl icon to start or mute the soundtrack.";
+        }
+        
+        if (lowerMsg.includes('eclipse')) {
+          return "- **Eclipse tours**: Use the Special Events panel buttons for guided solar and lunar eclipse flythroughs with kid-friendly narration.";
+        }
+        
+        // Default response
+        return "- **Cosmo**: Ask about planets, moons, missions, or how to use the explorer's controls.";
+      }
+      
+      // Event listeners for sending messages
+      sendButton.addEventListener('click', sendMessage);
+      
+      chatbotInput.addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+          sendMessage();
+        }
+      });
+      
+      // Add welcome message
+      setTimeout(() => {
+        addMessage("Welcome to the 3D Solar System Explorer. I am Cosmo, here to help you learn about space. Try asking about a specific planet or cosmic phenomenon.", 'bot');
+      }, 2000);
+    });
+  </script>
+</body>
+</html>
